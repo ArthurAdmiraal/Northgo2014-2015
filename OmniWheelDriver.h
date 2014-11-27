@@ -31,6 +31,7 @@ int DRIVER_MOVE_OFF = 45;          // a calibration value for driving forward
 // define some variables
 // a public variable, so the main program can read out the heading too
 int heading    = 0;
+int prevhead   = 0;
 tHTMC compass;
 
 // public variables, so the main program can set or read out these values directly
@@ -65,6 +66,7 @@ void OWupdate() {
 	float factor  = 1.0;
 	float highest = 0.0;
 	int diff      =   0;
+	int turn      =   0;
 	int rot       =   0;
 
 	// get compass heading
@@ -78,7 +80,16 @@ void OWupdate() {
 	diff = map360i(diff);
 	diff = 180-diff;
 	diff = deadZonei(diff, 10);
-
+	
+	// calculate what value to add to the motor to turn the robot smoothly
+	if(sgn(diff)!=sgn(prevdiff)) {
+		turn = ROTATION*sgn(diff);
+	}
+	
+	if((abs(head-prevhead)*10)>diff) {
+		turn = abs(turn)*sgn(diff)*9/10;
+	}
+	
 	// add all the calibration values to the moveDir and limit the data
 	rot = moveDir - heading + DRIVER_CAL + DRIVER_MOVE_OFF;
 	rot = map360i(rot);
@@ -86,7 +97,7 @@ void OWupdate() {
 	// set the values to the motor buffers
 	for(int i = 0; i<4; i++) {
 		motorbuff[i]  = moveSpeed*(cosDegrees(motorangle[i])*cosDegrees(rot)  + sinDegrees(motorangle[i])*sinDegrees(rot));
-		motorbuff[i] += diff*ROTATION/180;
+		motorbuff[i] += turn;
 	}
 
 	// 'limit' the data
@@ -103,6 +114,8 @@ void OWupdate() {
 	motor[motor2] = motorbuff[1]*factor;
 	motor[motor4] = motorbuff[2]*factor;
 	motor[motor3] = motorbuff[3]*factor;
+
+	prevhead = heading;
 
 	// print some debug information
 	eraseDisplay();
