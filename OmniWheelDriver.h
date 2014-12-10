@@ -17,13 +17,17 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>. //
 ///////////////////////////////////////////////////////////////////////////
 
+// compile options
+#define DEBUG    1 // 1 for debug information, 0 for no debug information
+int CMPS_CMP = 0; // 1 for compass compensated, 0 for no compass compensation
+
 // import libraries
 #include "hitechnic-compass.h"     // Include compass sensor file
 #include "FTCtools.h"              // Inlcude some useful tools
 
 // options - set as needed
-int DRIVER_CAL      = 45;          // for blue, -45 for red. Changes the offset of the drive direction
-int DRIVER_MOVE_OFF = 45;          // a calibration value for driving forward
+int DRIVER_CAL      = 0;          // for blue, -45 for red. Changes the offset of the drive direction
+int DRIVER_MOVE_OFF = -90;          // a calibration value for driving forward
 
 // define some constants
 #define ROTATION 100               // a constant used for finetuning the turn speed
@@ -46,10 +50,10 @@ int motorangle[4]    = {45, 135, 225, 315};
 int motorbuff[4]     = {0,0,0,0};
 
 // some variables to control the turning
-int prevdiff = 0; // the pervious difference in angles from the angle target and the last angle
-int turn     = 0;
-bool setTurn = false;
-int setTurnSpeed = 0;
+int  prevdiff     = 0; // the pervious difference in angles from the angle target and the last angle
+int  turn         = 0;
+int  setTurnSpeed = 0;
+bool setTurn      = false;
 
 //////////////////////////////////////////////////////////////////////////////////
 // OWinitialize(sensor compasssensor); ///////////////////////////////////////////
@@ -88,16 +92,21 @@ void OWupdate() {
 	diff = deadZonei(diff, 10);
 	
 	// calculate what value to add to the motor to turn the robot smoothly
+	// reverse turning when shooting past the target
+	if(sgn(diff)!=sgn(prevdiff)) {
+		turn = abs(turn)*sgn(diff);
+	}
+	
 	if(setTurn) {
 		turn    	 = setTurnSpeed;
 		setTurn 	 = false;
-		turnTarget = heading+180;
+		turnTarget   = heading+180;
 	} else {
 		int headdiff = abs(heading-prevhead);
-		if((headdiff*10)>abs(diff)) {
-			turn = constraini(abs(turn)-10, 0, ROTATION*10)*sgn(diff+0.001);
-		} else if((headdiff*8)<abs(diff)) {
-			turn = constraini(abs(turn)+4, 0, ROTATION*10)*sgn(diff+0.001);
+		if((headdiff*10)>(pow(abs(diff),2)/180)) {
+			turn = constraini(abs(turn)-1-abs(diff)/18, 0, ROTATION*10)*sgn(diff+0.001);
+		} else if((headdiff*8)<(pow(abs(diff),2)/180)) {
+			turn = constraini(abs(turn)+1+abs(diff)/18, 0, ROTATION*10)*sgn(diff+0.001);
 		}
 
 		if(abs(diff)<3) {
@@ -105,8 +114,10 @@ void OWupdate() {
 		}
 	}
 	
+	CMPS_CMP = !joy1Btn(8);
+	
 	// add all the calibration values to the moveDir and limit the data
-	rot = moveDir - heading + DRIVER_CAL + DRIVER_MOVE_OFF;
+	rot = moveDir - heading*CMPS_CMP + 180*CMPS_CMP + DRIVER_CAL + DRIVER_MOVE_OFF;
 	rot = map360i(rot);
 
 	// set the values to the motor buffers
@@ -131,12 +142,14 @@ void OWupdate() {
 	motor[motor3] = motorbuff[3]*factor;
 
 	prevhead = heading;
-
-	// print some debug information
-	eraseDisplay();
-	nxtDisplayCenteredTextLine(line1, "head: %d", heading);
-	nxtDisplayCenteredTextLine(line2, "diff: %d", diff);
-	nxtDisplayCenteredTextLine(line3, "m1: %d", motor[motor1]);
+	
+	#if DEBUG
+		// print some debug information
+		eraseDisplay();
+		nxtDisplayCenteredTextLine(line1, "head: %d", heading);
+		nxtDisplayCenteredTextLine(line2, "diff: %d", diff);
+		nxtDisplayCenteredTextLine(line3, "m1: %d", motor[motor1]);
+	#endif
 }
 
 //////////////////////////////////////////////////////////////////////////////////

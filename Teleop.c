@@ -70,7 +70,7 @@ task main()
 
 		// set the drive direction, magnitude and turntarget
 		OWsetDriveVec(x1, y1);
-		OWsetRotationSpeed(pow(abs(deadZonei(joystick.joy1_x2, LIMIT)*100/127), 2)*sgn(joystick.joy1_x2)*ROTATION*(1+joy1Btn(8)*3)/40000);
+		OWsetRotationSpeed(pow(abs(deadZonei(joystick.joy1_x2, LIMIT)*100/127), 2)*sgn(joystick.joy1_x2)*ROTATION/10000);
 
 		// update the omniwheels with the lates compass sensor readings
 		OWupdate();
