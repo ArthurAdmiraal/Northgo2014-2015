@@ -65,12 +65,12 @@ task main()
 		y1 = deadZonei(joystick.joy1_y1, LIMIT)*99/127;
 		
 		// apply logarithmic controls
-		x1 = log10(abs(x1)+1)*50*sgn(x1);
-		y1 = log10(abs(y1)+1)*50*sgn(y1);
+		x1 = x1*x1*sgn(x1)/100;
+		y1 = y1*y1*sgn(y1)/100;
 
 		// set the drive direction, magnitude and turntarget
 		OWsetDriveVec(x1, y1);
-		OWsetTurnTargetRelative(log10(abs(deadZonei(joystick.joy1_x2, LIMIT)*99/127)+1)*sgn(joystick.joy1_x2));
+		OWsetRotationSpeed(pow(abs(deadZonei(joystick.joy1_x2, LIMIT)*100/127), 2)*sgn(joystick.joy1_x2)*ROTATION*(1+joy1Btn(8)*3)/40000);
 
 		// update the omniwheels with the lates compass sensor readings
 		OWupdate();

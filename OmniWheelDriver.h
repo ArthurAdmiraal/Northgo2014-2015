@@ -45,6 +45,12 @@ tSensors compasssensor = S2;
 int motorangle[4]    = {45, 135, 225, 315};
 int motorbuff[4]     = {0,0,0,0};
 
+// some variables to control the turning
+int prevdiff = 0; // the pervious difference in angles from the angle target and the last angle
+int turn     = 0;
+bool setTurn = false;
+int setTurnSpeed = 0;
+
 //////////////////////////////////////////////////////////////////////////////////
 // OWinitialize(sensor compasssensor); ///////////////////////////////////////////
 // initializes the OmniWheel library /////////////////////////////////////////////
@@ -82,12 +88,21 @@ void OWupdate() {
 	diff = deadZonei(diff, 10);
 	
 	// calculate what value to add to the motor to turn the robot smoothly
-	if(sgn(diff)!=sgn(prevdiff)) {
-		turn = ROTATION*sgn(diff);
-	}
-	
-	if((abs(head-prevhead)*10)>diff) {
-		turn = abs(turn)*sgn(diff)*9/10;
+	if(setTurn) {
+		turn    	 = setTurnSpeed;
+		setTurn 	 = false;
+		turnTarget = heading+180;
+	} else {
+		int headdiff = abs(heading-prevhead);
+		if((headdiff*10)>abs(diff)) {
+			turn = constraini(abs(turn)-10, 0, ROTATION*10)*sgn(diff+0.001);
+		} else if((headdiff*8)<abs(diff)) {
+			turn = constraini(abs(turn)+4, 0, ROTATION*10)*sgn(diff+0.001);
+		}
+
+		if(abs(diff)<3) {
+			turn = 0;
+		}
 	}
 	
 	// add all the calibration values to the moveDir and limit the data
@@ -97,7 +112,7 @@ void OWupdate() {
 	// set the values to the motor buffers
 	for(int i = 0; i<4; i++) {
 		motorbuff[i]  = moveSpeed*(cosDegrees(motorangle[i])*cosDegrees(rot)  + sinDegrees(motorangle[i])*sinDegrees(rot));
-		motorbuff[i] += turn;
+		motorbuff[i] += turn/10;
 	}
 
 	// 'limit' the data
@@ -158,4 +173,13 @@ void OWsetTurnTarget(int d1) {
 //////////////////////////////////////////////////////////////////////////////////
 void OWsetTurnTargetRelative(int d1) {
 	turnTarget = map360i(turnTarget + d1);
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+// OWsetRotationSpeed(); /////////////////////////////////////////////////////////
+// sets the direction target relative to the current direction ///////////////////
+//////////////////////////////////////////////////////////////////////////////////
+void OWsetRotationSpeed(int d1) {
+	setTurn      = (abs(d1)>0);
+	setTurnSpeed = -constraini(d1, -ROTATION, ROTATION)*10;
 }
