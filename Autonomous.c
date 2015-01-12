@@ -41,42 +41,39 @@
 #include "lego-touch.h"            // Include driver for the touch sensors
 
 // define some constants
-
 #define LIMIT 10
 
 // define some variables
-int x1 = 0;
-int y1 = 0;
+int state = 0;
+
+// Create struct to hold IR sensor data
+tHTIRS2 irSeeker;
 
 void initializeRobot() {
 	// put all the initialization code here
 }
 
-task main() {
+task main()
+{
 	initializeRobot();
+
+  // init all subsystems
+	initSensor(&irSeeker, S1);						// initialise and configure struct and port
+	irSeeker.mode = DSP_1200;
 	OWinitialize(S2, 45, 135, 225, 315);	// initialize the omniwheel driver with the compass sensor on sensor port 2
+
 	waitForStart();     // wait for start of tele-op phase
 
 	while(true) {
+		switch(state) {
+			case 0: {OWsetDriveVec(0, 100); if(time1[T1]>=1000){ClearTimer(T1); state=1;}} break;
+			case 1: {OWsetDriveVec(100, 0); if(time1[T1]>=1000){ClearTimer(T1); state=2;}} break;
+			case 2: {OWsetDriveVec(0, -100); if(time1[T1]>=1000){ClearTimer(T1); state=3;}} break;
+			case 3: {OWsetDriveVec(-100, 0); if(time1[T1]>=1000){ClearTimer(T1); state=0;}} break;
+	}
+
 		getJoystickSettings(joystick);
-
-		// apply a dead zone to the joystick data and scale the data
-		x1 = -deadZonei(joystick.joy1_x1, LIMIT)*100/127;
-		y1 = deadZonei(joystick.joy1_y1, LIMIT)*100/127;
-
-		// apply logarithmic controls
-		x1 = x1*x1*sgn(x1)/100;
-		y1 = y1*y1*sgn(y1)/100;
-
-		// set the drive direction, magnitude and turntarget
-		OWsetDriveVec(x1, y1);
-		OWsetRotationSpeed(pow(abs(deadZonei(joystick.joy1_x2, LIMIT)*100/127), 2)*sgn(joystick.joy1_x2)*ROTATION/(10000*(1+5*joy1Btn(7))));
-
-		if(joy1Btn(1)) {
-			OWsetTurnTarget(DRIVER_CAL);
-		}
-
-		// update the omniwheels with the lates compass sensor readings
+		// update the omniwheels with the latest compass sensor readings
 		OWupdate();
 	}
 }

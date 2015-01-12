@@ -1,4 +1,5 @@
 #pragma config(Hubs,  S1, MatrxRbtcs, none,     none,     none)
+#pragma config(Sensor, S1,     ,               sensorI2CMuxController)
 #pragma config(Sensor, S2,     ,               sensorI2CCustom)
 #pragma config(Sensor, S3,     ,               sensorI2CCustom)
 #pragma config(Sensor, S4,     ,               sensorI2CCustom)
@@ -34,49 +35,89 @@
 // include drivers
 #include "JoystickDriver.c"        // Include file to handle the Bluetooth messages
 #include "OmniWheelDriver.h"       // Include driver for the sensor multiplexer
-#include "FTCtools.h"              // Include some usefull scripts
 #include "hitechnic-compass.h"     // Include compass sensor file
 #include "hitechnic-irseeker-v2.h" // Include driver for the IR Seeker V2
 #include "lego-light.h"            // Include driver for the light sensors
 #include "lego-touch.h"            // Include driver for the touch sensors
+#include "lego-ultrasound.h"       // Include driver for the ultrasound sensors
 
 // define some constants
-
-#define LIMIT 10
+#define LIMIT 		 	 10		//
+#define TUBE_DIST 	100		// distance from platform the robot has to drive in order to grab a tube
+#define MIDDLE_DIST  70		// distance from platform to the middle of the field
+#define SPEED 		 	 40		// the max speed of the robot during the autonomous phase
 
 // define some variables
-int x1 = 0;
-int y1 = 0;
+int minDist = 255;
+int head    = 0;
+int state   = 0;
 
 void initializeRobot() {
 	// put all the initialization code here
 }
 
-task main() {
+task main()
+{
+	//initialize all subsystems
 	initializeRobot();
 	OWinitialize(S2, 45, 135, 225, 315);	// initialize the omniwheel driver with the compass sensor on sensor port 2
-	waitForStart();     // wait for start of tele-op phase
 
+	OWupdate();
+	OWsetTurnTarget(heading+180);
+
+	clearTimer(T1); // global program timer
+	clearTimer(T2); // state timer
 	while(true) {
-		getJoystickSettings(joystick);
+		switch(state) {
+			case 0: { // drive backwards until you can grab a tube
+				int dist = 100;
 
-		// apply a dead zone to the joystick data and scale the data
-		x1 = -deadZonei(joystick.joy1_x1, LIMIT)*100/127;
-		y1 = deadZonei(joystick.joy1_y1, LIMIT)*100/127;
+				if(time1[T2]>10000) {
+					// measure the distance to the wall and adjust speed accordingly
+					dist = USreadDist(S3)-TUBE_DIST;
+					OWsetDrive(constraini(dist*3, -SPEED, SPEED), 45);
+				} else {
+					OWsetDrive(-SPEED, 45);
+				}
 
-		// apply logarithmic controls
-		x1 = x1*x1*sgn(x1)/100;
-		y1 = y1*y1*sgn(y1)/100;
+				// go to the next state if the robot has reached it's goal
+				if((abs(dist)<3)&&(motor[motor1]<20)&&(time1[T2]>500)) {
+					OWsetDriveVec(0, 0);
+					state = 1;
+					clearTimer(T2);
+				}
 
-		// set the drive direction, magnitude and turntarget
-		OWsetDriveVec(x1, y1);
-		OWsetRotationSpeed(pow(abs(deadZonei(joystick.joy1_x2, LIMIT)*100/127), 2)*sgn(joystick.joy1_x2)*ROTATION/(10000*(1+5*joy1Btn(7))));
+				OWupdate();
+			} break;
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			case 1: { // grab the tube
+				//* NOT IMPLEMENTED!!! *//
 
-		if(joy1Btn(1)) {
-			OWsetTurnTarget(DRIVER_CAL);
+				// go to the next state, but only when the servos have had enough time to grab the tube
+				if(time1[T2]>1000) {
+					state = 2;
+					clearTimer(T2);
+				}
+			} break;
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			case 2: { // drive to the middle of the field, using the ultrasound sensor
+				// measure the distance to the wall and adjust speed accordingly
+				int dist = USreadDist(S3)-MIDDLE_DIST;
+				OWsetDrive(-constraini(dist*3, -40, 40), 90);
+
+				// go to the next state if the robot has reached it's goal
+				if((abs(dist)<3)&&(motor[motor1]<20)) {
+					OWsetDriveVec(0, 0);
+					state = 3;
+					clearTimer(T2);
+				}
+
+				OWupdate();
+			} break;
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			case 3: {
+				OWupdate();
+			} break;
 		}
-
-		// update the omniwheels with the lates compass sensor readings
-		OWupdate();
 	}
 }

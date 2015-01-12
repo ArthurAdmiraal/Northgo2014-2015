@@ -1,4 +1,5 @@
 #pragma config(Hubs,  S1, MatrxRbtcs, none,     none,     none)
+#pragma config(Sensor, S1,     ,               sensorI2CMuxController)
 #pragma config(Sensor, S2,     ,               sensorI2CCustom)
 #pragma config(Sensor, S3,     ,               sensorI2CCustom)
 #pragma config(Sensor, S4,     ,               sensorI2CCustom)
@@ -34,49 +35,36 @@
 // include drivers
 #include "JoystickDriver.c"        // Include file to handle the Bluetooth messages
 #include "OmniWheelDriver.h"       // Include driver for the sensor multiplexer
-#include "FTCtools.h"              // Include some usefull scripts
 #include "hitechnic-compass.h"     // Include compass sensor file
 #include "hitechnic-irseeker-v2.h" // Include driver for the IR Seeker V2
 #include "lego-light.h"            // Include driver for the light sensors
 #include "lego-touch.h"            // Include driver for the touch sensors
+#include "lego-ultrasound.h"       // Include driver for the ultrasound sensors
 
 // define some constants
-
 #define LIMIT 10
 
 // define some variables
-int x1 = 0;
-int y1 = 0;
+int minDist = 255;
+int head    = 0;
+int state   = 0;
 
 void initializeRobot() {
 	// put all the initialization code here
 }
 
-task main() {
+task main()
+{
 	initializeRobot();
 	OWinitialize(S2, 45, 135, 225, 315);	// initialize the omniwheel driver with the compass sensor on sensor port 2
-	waitForStart();     // wait for start of tele-op phase
+	eraseDisplay();
 
+	OWupdate();
+	OWsetTurnTarget(heading+180);
+
+	clearTimer(T1);
 	while(true) {
-		getJoystickSettings(joystick);
-
-		// apply a dead zone to the joystick data and scale the data
-		x1 = -deadZonei(joystick.joy1_x1, LIMIT)*100/127;
-		y1 = deadZonei(joystick.joy1_y1, LIMIT)*100/127;
-
-		// apply logarithmic controls
-		x1 = x1*x1*sgn(x1)/100;
-		y1 = y1*y1*sgn(y1)/100;
-
-		// set the drive direction, magnitude and turntarget
-		OWsetDriveVec(x1, y1);
-		OWsetRotationSpeed(pow(abs(deadZonei(joystick.joy1_x2, LIMIT)*100/127), 2)*sgn(joystick.joy1_x2)*ROTATION/(10000*(1+5*joy1Btn(7))));
-
-		if(joy1Btn(1)) {
-			OWsetTurnTarget(DRIVER_CAL);
-		}
-
-		// update the omniwheels with the lates compass sensor readings
+		OWsetDriveVec(0, constraini((USreadDist(S3)-75.0+25.0*sin(time100[T1]/60.0))*5.0, -100, 100));
 		OWupdate();
 	}
 }
