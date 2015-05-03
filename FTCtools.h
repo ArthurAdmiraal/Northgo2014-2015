@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////
 // FTCtools.c                                                            //
-// some usefull scripts for the FTC                                      //
+// Some usefull scripts for the FTC                                      //
 // Copyright (C) 2014  Arthur Admiraal                                   //
 //                                                                       //
 // This program is free software: you can redistribute it and/or modify  //

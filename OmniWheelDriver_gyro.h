@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////
-// OmniWheelDriver.c                                                     //
+// OmniWheelDriver_gyro.c                                                //
 // An easy-to-use driver for driving omni-wheels                         //
 // Copyright (C) 2014  Arthur Admiraal                                   //
 //                                                                       //
@@ -22,6 +22,7 @@
 #define CMPS_CMP 1
 
 // import libraries
+#include "hitechnic-gyro.h"        // Include gyro sensor file
 #include "hitechnic-compass.h"     // Include compass sensor file
 #include "FTCtools.h"              // Inlcude some useful tools
 
@@ -29,13 +30,14 @@
 int DRIVER_MOVE_OFF = -90;          // a calibration value for driving forward
 
 // define some constants
-#define ROTATION 100               // a constant used for finetuning the turn speed
+#define ROTATION   100              // a constant used for finetuning the turn speed
+#define CMPS_PORT	 msensor_S2_2
 
 // define some variables
 // a public variable, so the main program can read out the heading too
 int heading    = 0;
 int prevhead   = 0; // the previous heading
-tHTMC compass;
+tHTGYRO gyroSensor;
 
 // public variables, so the main program can set or read out these values directly
 int moveDir    = 0;
@@ -43,7 +45,7 @@ int moveSpeed  = 0;
 int turnTarget = 0;
 
 // private global variables, so all the scripts in the library can read them out
-tSensors compasssensor = S2;
+tSensors gyroPort = S2;
 
 int motorangle[4]    = {45, 135, 225, 315};
 int motorbuff[4]     = {0,0,0,0};
@@ -56,21 +58,71 @@ int setTurnSpeed = 0;
 float whatdone = 1;
 float driverOffset = 0; // the driver standing offset
 
+float prevTime  = 0;
+float prevTime2 = 0;
+
+int turnSpeed = 0;
+
+int   gyroCal   = 0;
+float gyroAngle = 0;
+
+float predict  = 0;
+float timediff = 0;
+
 int OWmode = 0;
 
 bool isBusy = false;
 bool compassCompensation = true;
 
+int prevTurnSpeed = 0;
+
+int prevCmpHead = 0;
+int cmpHead     = 0;
+bool turning = false;
+
 //////////////////////////////////////////////////////////////////////////////////
+// task updateGyro() /////////////////////////////////////////////////////////////
+// updates the angle /////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
+task updateGyro() {
+	while(true) {
+		hogCPU();
+			readSensor(&gyroSensor);
+			turnSpeed  = gyroSensor.rotation - gyroCal;
+			turnSpeed  = turnSpeed*(abs(turnSpeed)>3);
+			gyroAngle += ((float)turnSpeed) * ((float)((prevTime2=nPgmTime) - prevTime)-0.12) / 1000.0;
+		releaseCPU();
+		prevTime      = prevTime2;
+		prevTurnSpeed = turnSpeed;
+		wait1Msec(4);	// wait, so this process doesn't clog the CPU
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+// OWsetnoGyro(); ////////////////////////////////////////////////////////////////
+// resets gyro ///////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
+void OWsetnoGyro() {
+	readSensor(&gyroSensor);
+	gyroCal = gyroSensor.rotation;
+}
+
+///////////////////////////////////////////////////
 // OWinitialize(sensor compasssensor); ///////////////////////////////////////////
 // initializes the OmniWheel library /////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
 void OWinitialize(tSensors cs, int a1, int a2, int a3, int a4) {
-	initSensor(&compass, cs);
+	gyroPort      = cs;
+	initSensor(&gyroSensor, gyroPort);
+	readSensor(&gyroSensor);
+	gyroCal       = gyroSensor.rotation;
+	startTask(updateGyro);
 	motorangle[0] = map360i(a1);
 	motorangle[1] = map360i(a2);
 	motorangle[2] = map360i(a3);
 	motorangle[3] = map360i(a4);
+	clearTimer(T4);
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -83,9 +135,10 @@ void OWupdate() {
 	int diff      =   0;
 	int rot       =   0;
 
-	// get compass heading
-	readSensor(&compass);
-	heading = compass.heading;
+	int localTurnSpeed = turnSpeed/60;
+
+	// get gyro heading for calculations
+	heading = gyroAngle;
 
 	// find the difference in angles with the direction target
 	diff = turnTarget-heading;
@@ -102,29 +155,28 @@ void OWupdate() {
 	}
 
 	switch(OWmode) {
-		case 0: {
+		case 0: { // driver controlled turning
 			turn    	 = setTurnSpeed;
-			//setTurn	 = false;
 			turnTarget = heading+180;
 			isBusy     = true;
 			OWmode     = 1;
 			clearTimer(T3);
 		} break;
 
-		case 1: {
+		case 1: { // wait till turning has stopped (takes some time due to inertia) to avoid transient response
 			turn       = 0;
 			turnTarget = heading+180;
 			isBusy     = true;
 
-			if((abs(heading-prevhead)<=0)&&(time1[T3]>200)) {
+			if((abs(localTurnSpeed)<=0)&&(time1[T3]>200)) {
 				OWmode = 2;
 			}
 		} break;
 
-		case 2: {
+		case 2: { // do closed-loop control system
 			if(abs(diff)>5){
 				isBusy = true;
-				int headdiff = abs(heading-prevhead);
+				int headdiff = abs(localTurnSpeed);
 				if((headdiff*10)>(10+pow(diff,2)/180)) {
 					turn = constraini(abs(turn)-constraini(1+1800/abs(diff),0,abs(turn)/5), 0, ROTATION*10)*sgn(diff+0.001);
 				} else if((headdiff*10)<(10+pow(diff,2)/180)) {
@@ -176,7 +228,8 @@ void OWupdate() {
 		nxtDisplayCenteredTextLine(2, "diff: %d", diff);
 		nxtDisplayCenteredTextLine(3, "m1: %d", motor[motor1]);
 		nxtDisplayCenteredTextLine(4, "turn: %d", turn);
-		nxtDisplayCenteredTextLine(5, "OWmode: %d", OWmode);
+		nxtDisplayCenteredTextLine(5, "trsp: %d", localTurnSpeed);
+		nxtDisplayCenteredTextLine(6, "OWmode: %d", OWmode);
 	#endif
 }
 
@@ -184,7 +237,6 @@ void OWupdate() {
 // OWsetDriveVec(); //////////////////////////////////////////////////////////////
 // sets the drivedata ////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////
-
 void OWsetDriveVec(float x1, float y1) {
 	// do calculations on the data
 	moveSpeed = constrainf(sqrt(pow(x1, 2) + pow(y1, 2)), -100.0, 100.0);
